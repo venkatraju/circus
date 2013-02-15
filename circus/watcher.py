@@ -305,24 +305,32 @@ class Watcher(object):
             self.evpub_socket.send_multipart(multipart_msg)
 
     @util.debuglog
-    def reap_process(self, pid, status=None):
+    def reap_process(self, pid, status=None, limit=1):
         """ensure that the process is killed (and not a zombie)"""
-        process = self.processes.pop(pid)
+        process = self.processes.get(pid)
 
         if not status:
             while True:
                 try:
-                    _, status = os.waitpid(pid, os.WNOHANG)
+                    p, status = os.waitpid(pid, os.WNOHANG)
+                    if p == 0:
+                        if limit > 0:
+                            limit -= 1
+                            time.sleep(1)
+                        else:
+                            return
                 except OSError as e:
                     if e.errno == errno.EAGAIN:
                         time.sleep(0.001)
                         continue
                     elif e.errno == errno.ECHILD:
-                        # nothing to do here, we do not have any child
-                        # process running
+                        # we do not have any child process running
+                        self.processes.pop(pid)
                         return
                     else:
                         raise
+
+        self.processes.pop(pid)
 
         # get return code
         if os.WIFSIGNALED(status):

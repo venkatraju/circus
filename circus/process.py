@@ -16,7 +16,7 @@ import time
 import shlex
 import warnings
 
-from psutil import Popen, STATUS_ZOMBIE, STATUS_DEAD, NoSuchProcess
+from psutil import Popen, STATUS_ZOMBIE, STATUS_DEAD, NoSuchProcess, AccessDenied
 
 from circus.py3compat import bytestring, string_types
 from circus.util import (get_info, to_uid, to_gid, debuglog, get_working_dir,
@@ -250,7 +250,13 @@ class Process(object):
         children = dict([(child.pid, child)
                          for child in self._worker.get_children()])
 
-        children[pid].send_signal(signum)
+        try:
+            if pid in children:
+                children[pid].send_signal(signum)
+        except NoSuchProcess:
+            logger.warn("send signal %d to PID %d failed: NoSuchProcess", signum, pid)
+        except AccessDenied:
+            logger.warn("send signal %d to PID %d failed: AccessDenied", signum, pid)
 
     @debuglog
     def send_signal_children(self, signum):
